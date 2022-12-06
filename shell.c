@@ -165,6 +165,11 @@ int check_for_redirect(int exec_arg_size) {
 int begin_fork(char ** exec_args) {
     if (strcmp(exec_args[0], "cd") == 0) {
         // change directory
+
+        for (int i = 0; i < 1000; i++) {
+            cd_args[i] = '\0';
+        } // for
+
         if (exec_args[1] == NULL) {
             exec_args[1] = "..";
         } // if
@@ -185,7 +190,6 @@ int begin_fork(char ** exec_args) {
 } // begin_fork
 
 char* get_cd_args(char* args) {
-
     for (int i = 0; i < strlen(args); i++) {
         if (args[i] == '.') {
             if (args[i + 1] == '.') {
