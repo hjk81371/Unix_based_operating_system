@@ -16,6 +16,7 @@ char buf[BUFFSIZE];
 char prompt[100] = "1730sh:";
 char * exec_args[BUFFSIZE];
 char* array_without_redirects[BUFFSIZE];
+char cd_args[1000];
 pid_t pid;
 int saved_stdout;
 int saved_stdin;
@@ -23,9 +24,9 @@ int saved_stdin;
 int getPrompt();
 int check_for_redirect(int exec_arg_size);
 int begin_fork(char ** exec_args);
+char* get_cd_args(char* args);
 
 int main() {
-
     char * delimiters = " \n";
 
     // main program loop
@@ -39,6 +40,10 @@ int main() {
         int prompt_size = getPrompt();
         write(STDOUT_FILENO, prompt, prompt_size);
         int cmd_bytes_read = read(STDIN_FILENO, cmd, BUFFSIZE);
+
+        // check if there is no command
+        if (cmd_bytes_read < 2) continue;
+
         char * tokenized_cmd = calloc(cmd_bytes_read, sizeof(char));
         tokenized_cmd = strtok(cmd, delimiters);
         int index = 0;
@@ -55,7 +60,7 @@ int main() {
         if (check_for_redirect(exec_arg_size)) {
             begin_fork(array_without_redirects);
         } else {
-            begin_fork(exec_args);
+            if (begin_fork(exec_args) < 0) printf("cd error\n");
         } // if
 
         // restore stdin/out to origional
@@ -114,7 +119,6 @@ int check_for_redirect(int exec_arg_size) {
 
     saved_stdout = dup(STDOUT_FILENO);
     saved_stdin = dup(STDIN_FILENO);
-
     for (int i = 0; i < exec_arg_size; i++) {
         if (strcmp(exec_args[i], ">") == 0) { // redirect output
             nomatch = 0;
@@ -133,7 +137,6 @@ int check_for_redirect(int exec_arg_size) {
             } // if
             dup2(fd, STDIN_FILENO);
         } else if (strcmp(exec_args[i], ">>") == 0) { // redirect append output
-            printf("yup\n");
             nomatch = 0;
             fd = open(exec_args[i + 1], O_WRONLY | O_APPEND | O_CREAT, 0666);
             if (fd < 0) {
@@ -162,7 +165,11 @@ int check_for_redirect(int exec_arg_size) {
 int begin_fork(char ** exec_args) {
     if (strcmp(exec_args[0], "cd") == 0) {
         // change directory
-        return chdir(exec_args[1]);
+        if (exec_args[1] == NULL) {
+            exec_args[1] = "..";
+        } // if
+        char* cd_path = get_cd_args(exec_args[1]);
+        return chdir(cd_path);
     } // if
 
     pid = fork();
@@ -176,3 +183,62 @@ int begin_fork(char ** exec_args) {
     } // if
     return 1;
 } // begin_fork
+
+char* get_cd_args(char* args) {
+
+    for (int i = 0; i < strlen(args); i++) {
+        if (args[i] == '.') {
+            if (args[i + 1] == '.') {
+                // case for '..'
+                char * cwd_buf = calloc(256, sizeof(char));
+                getcwd(cwd_buf, 256);
+                int j;
+                for (j = strlen(cwd_buf); j >= 0; j--) {
+                    if (cwd_buf[j] == '/') break;
+                } // for
+                for (int k = 0; k < j; k++) {
+                    cd_args[k] = cwd_buf[k];
+                } // for
+                free(cwd_buf);
+                return cd_args;
+
+            } else {
+                if (i > 0 && args[i - 1] == '.') continue;
+                // case for '.'
+                char * cwd_buf = calloc(256, sizeof(char));
+                getcwd(cwd_buf, 256);
+                int j;
+                // replace '.' with getenv("HOME")
+                for (j = 0; j < strlen(cwd_buf); j++) {
+                    cd_args[j] = cwd_buf[j];
+                } // for
+
+                // append args after '.'
+                j++;
+                for (int k = 2; k < strlen(args); k++, j++) {
+                    cd_args[j] = args[k];
+                } // for
+            } // if
+
+        } else if (args[i] == '~') {
+            // case for '~'
+            char * home = getenv("HOME");
+            int j;
+            for (j = 0; j < strlen(home); j++) {
+                // replaces ~ with home
+                cd_args[j] = home[j];
+            } // for
+            j++;
+            for (int k = 1; k < strlen(args); k++, j++) {
+                // appends the rest of args after "~" to cd_args
+                cd_args[j] = args[k];
+            } // for
+
+        } else {
+            // no special cd characters used
+            return args;
+        } // if
+
+    } // for
+    return cd_args;
+} // get_cd_args
