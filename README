@@ -1,0 +1,4 @@
+This is a Unix based operating system coded in the C programming language.
+The program uses system calls to the operating system to perform common operating system functionality, like changing directories, creating and removing files and directories. And other typical Unix commands.
+
+To run this project, download the shell.c and Makefile, then invoke $make run to compile and run the C code.
